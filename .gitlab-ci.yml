@@ -1,4 +1,4 @@
-stages:          # Order of execution
+stages:
   - install
   - build
   - push
@@ -8,59 +8,48 @@ variables:
   DOCKER_DRIVER: overlay2
   APP_NAME: "my-k8s-app"
 
-# ----------------------
-# Install dependencies
-# ----------------------
+before_script:
+  - echo "Logging into Docker Hub..."
+  - echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
+
 Install_Dependencies:
   stage: install
-  tags:
-    - shell                 # run on local runner with Node & Docker installed
+  image: node:18
   script:
-    - echo "Installing dependencies..."
     - npm install
   artifacts:
     paths:
-      - node_modules/      # Preserve for later stages
-    expire_in: 1h
+      - node_modules/
 
-# ----------------------
-# Build Docker image
-# ----------------------
 Build_Docker_Image:
   stage: build
-  tags:
-    - shell                 # run on local runner with Docker installed
-  dependencies:
-    - Install_Dependencies
+  image: docker:latest
+  services:
+    - docker:dind
   script:
-    - echo "Logging into Docker Hub..."
-    - echo "$DOCKER_HUB_PASSWORD" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
-    - echo "Building Docker image..."
     - docker build -t $APP_NAME:$CI_PIPELINE_IID .
     - docker tag $APP_NAME:$CI_PIPELINE_IID $DOCKER_HUB_USERNAME/$APP_NAME:latest
 
-# ----------------------
-# Push Docker image to Docker Hub
-# ----------------------
 Push_Docker_Image:
   stage: push
-  tags:
-    - shell
-  dependencies:
-    - Build_Docker_Image
+  image: docker:latest
+  services:
+    - docker:dind
   script:
-    - echo "Pushing Docker image to Docker Hub..."
     - docker push $DOCKER_HUB_USERNAME/$APP_NAME:latest
 
-# ----------------------
-# Deploy to Minikube (local runner)
-# ----------------------
 Deploy_to_Minikube:
   stage: deploy
   tags:
-    - shell           # Make sure your local runner has this tag
+  - shell   # run on your local Ubuntu runner
+  #image: alpine:latest
   before_script:
-    - echo "Using local Minikube installed on Ubuntu..."
+    #- apk add --no-cache curl bash docker
+    #- curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+    #- install minikube-linux-amd64 /usr/local/bin/minikube
+    #- curl -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
+    #- install kubectl /usr/local/bin/kubectl
+    - echo "Using local Minikube installed on Ubuntu..." 
   script:
     - minikube status || minikube start --driver=docker --memory=2048 --cpus=2
     - kubectl apply -f k8s/deployment.yaml
